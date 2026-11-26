@@ -65,4 +65,39 @@ I committed those separately as `fix: update WatchlistEntry film_id to UUID afte
 - Ran `pytest tests/ -v` and all 6 tests pass (4 collection + 2 watchlist), now running against the UUID version of the models.
 
 ## PR Description
-<!-- Written at the end — feature overview, design decisions, manual testing steps -->
+### What this does
+This adds a watchlist to CineLog. A watchlist is a list of films a user wants to watch later, separate from their collection of films they've already watched. Users can add a film to their watchlist with `POST /watchlist/<user_id>/add` and view it with `GET /watchlist/<user_id>`. Adding the same film twice is blocked, and adding a film that doesn't exist raises `FilmNotFoundError`, the same way the collection feature works.
+
+### Design decisions
+- **Visibility defaults to public (`public=True`).** CineLog is a community app, and watchlists are most useful when friends can see them (discovering films, planning to watch something together). Most users never change defaults, so private-by-default would mean almost nobody's watchlist is visible. The tradeoff is privacy: someone might not realize their list is visible, and film choices can reveal personal things. Right now there's no way for a user to change `public`, and `get_watchlist()` doesn't filter private entries yet. I'm planning to add both in a follow-up PR, and if that needs to happen before this merges, I'll switch the default to `False` until then. (Full reasoning in Comment 4.)
+- **Watchlist is sorted by date added, newest first.** A watchlist works more like a queue than a catalog, since what you added most recently is usually what you're most interested in. This also matches how `get_collection()` already sorts. For long lists where finding a title by name matters, a `?sort=title` option could be added later. (Full reasoning in Comment 5.)
+- **Follows existing patterns:** `add_to_watchlist()` uses the `verb_to_noun` naming convention, and its duplicate check works the same way as `add_to_collection()`. Film IDs are UUIDs to match main's refactor.
+
+### How to test manually
+1. Check out the branch and install dependencies:
+   ```bash
+   git checkout feature/watchlist
+   pip install -r requirements.txt
+   ```
+2. Start from a fresh database. If you have an old `instance/cinelog.db` from before the UUID refactor, delete it first, because `seed.py` skips seeding if data already exists.
+   ```bash
+   rm -f instance/cinelog.db
+   python seed.py
+   ```
+   Copy the `user_id` it prints for the demo user.
+3. Start the app: `python app.py` (runs on `http://localhost:5000`).
+4. Get some film IDs: `curl http://localhost:5000/films/` and copy two of the `id` values (they're UUIDs).
+5. Add the first film to the watchlist:
+   ```bash
+   curl -X POST http://localhost:5000/watchlist/<user_id>/add \
+     -H "Content-Type: application/json" \
+     -d '{"film_id": "<film_id_1>"}'
+   ```
+   You should get a `201` with the new entry, and it should have `"public": true`.
+6. Wait a second, then add the second film the same way using `<film_id_2>`.
+7. View the watchlist: `curl http://localhost:5000/watchlist/<user_id>`. Both films should be there, and the second film you added should be **first** (newest first), whatever the titles are alphabetically.
+8. Try adding the first film again. It should **not** create a second entry. Run step 7 again and there should still be only 2 films.
+9. Try adding with an empty body (`-d '{}'`). It should return `400` with `"film_id is required"`.
+10. Run the tests: `pytest tests/ -v`. All 6 should pass.
+
+**Known limitation:** the route doesn't catch `AlreadyInWatchlistError` or `FilmNotFoundError` yet, so steps 8 and a bad film ID currently return a `500` instead of a cleaner `409`/`404`. No duplicate or bad data gets saved, though. I'd like to fix the status codes in the follow-up PR along with the visibility endpoint.
