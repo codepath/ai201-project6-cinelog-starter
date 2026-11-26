@@ -8,8 +8,8 @@
 **How I verified:** Performed a proejct-wide search for "save_to_watchlist()" to ensure the results were None
 
 ## Comment 2 — Deduplication
-**What I did:**
-**How I verified:**
+**What I did:** I added dedeuplication logic for add_to_watclist() using the convention from add_to_collection(). This convention is to define a boolean variable for whether a query search for the film returns a value or is None. If the variable is true, an exception is raised and the film is not added to the watchlist.
+**How I verified:** I had Claude run a test and show the results.
 
 ## Comment 3 — Missing test
 **What I did:**
