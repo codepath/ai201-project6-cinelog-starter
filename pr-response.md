@@ -1,7 +1,11 @@
 # PR Response Doc — CineLog Watchlist Feature
 
 ## AI Usage
-<!-- Fill in at the end — how you used AI tools during this project -->
+I used Claude Code (inside VS Code) pretty heavily on this project, so here's what it did and what I did:
+
+- **Understanding the pattern:** It explained what the duplicate check in `add_to_collection()` does: it queries `CollectionEntry` by `user_id` + `film_id`, and if a row already exists it raises `AlreadyInCollectionError` instead of inserting. That's what I used to describe the pattern in Comment 2.
+- **Comments 4 and 5:** I picked the positions (keep `public=True`, switch to date added) and used AI to help write them up and act as a devil's advocate. The most useful thing it caught was in Comment 4. My argument assumed users could make entries private, but there's no endpoint to change `public`, and `get_watchlist()` doesn't filter on it, so the flag doesn't actually do anything yet. I added that to the tradeoff section along with the follow-up plan. For Comment 5, it pushed on the "long lists are hard to scan" point, which is where the `?sort=title` idea came from.
+- **Rebase:** When `git fetch` failed, it found the stale lock/duplicate ref files in `.git` and removed them after checking that no git process was running. It also did the rebase. I decided how to resolve the `models.py` conflict (keep the UUID type, keep the index).
 
 ## Comment 1 — Rename
 **What I did:** Renamed `save_to_watchlist()` to `add_to_watchlist()` in `services/watchlist_service.py` so it matches the verb_to_noun convention the rest of the codebase uses (`add_to_collection()`, `remove_from_collection()`, etc). Then I updated the one call site in `routes/watchlist/watchlist.py` — both the import line at the top and the actual call inside `add_film()`. I almost missed the import since I was only looking for the function call at first.
@@ -18,19 +22,47 @@ I did the same thing in `add_to_watchlist()`: added an `AlreadyInWatchlistError`
 **How I verified:** Ran `pytest tests/test_watchlist.py -v` and the new test passed. Then ran the full suite with `pytest tests/ -v` and all 5 tests passed (4 collection + 1 watchlist).
 
 ## Comment 4 — Default visibility
-**My position:**
-**Reasoning:**
-**Tradeoff acknowledged:**
+**My position:** Keep `public=True` as the default for watchlist entries.
+
+**Reasoning:** The README describes CineLog as a community film tracking app, so the social side is a big part of the point. A watchlist is one of the most useful things to share on a platform like this: friends can see what you're planning to watch, you can find movies through people you follow, and it makes it easy to plan watching something together. The user behavior I'm optimizing for is discovery. If watchlists start out private, most of them will just stay private, because most people never go into settings and change a default. That would leave the community side of the app pretty empty.
+
+The other part of my reasoning is about what's actually being shared. A watchlist is just film titles someone *wants* to watch. There aren't ratings or reviews attached, so it's lower stakes than something like a collection with ratings. Also, `public` is stored on each `WatchlistEntry`, not on the whole list, so a user could hide one specific film without making their whole watchlist private. That's more flexible than an all-or-nothing setting.
+
+**Tradeoff acknowledged:** The big downside is privacy. Since defaults basically end up being the decision for most people, public-by-default means a lot of users will be sharing their watchlist without really deciding to. Some film choices can say personal things about someone (like a film about a health issue, their sexuality, religion, etc.), and that person might not realize it's visible. Private-by-default would avoid that, and it's honestly the safer choice.
+
+When I was stress-testing this, I also realized my argument depends on users being *able* to change visibility, and right now they can't. There's no endpoint to toggle `public`, and `get_watchlist()` returns every entry whether it's public or not, so the flag isn't actually enforced anywhere yet. I don't think public-by-default is OK to ship until both of those exist. I'd like to do them as a follow-up PR: a way to set `public` (either in the add request body or a separate update endpoint), and filtering out private entries when someone views another user's watchlist. If you'd rather not merge this until those are in, I understand. In that case I'd switch the default to `False` for now and change it back once users can actually control it.
 
 ## Comment 5 — Sort order
-**My position:**
-**Reasoning:**
-**Engagement with reviewer's point:**
+**My position:** I switched to date added (newest first).
+
+**Reasoning:** I originally used alphabetical because I was picturing someone scanning their list for a specific title. But after thinking about how a watchlist actually gets used, I think date added makes more sense. A watchlist is more like a queue than a catalog. The stuff you added most recently is usually what you're most interested in right now, like a movie a friend just recommended or a trailer you just saw. It also matches `get_collection()`, which already sorts by `date_added` descending, so both list endpoints in the API now behave the same way. That's one less thing someone has to remember about the API.
+
+Code changes: in `get_watchlist()` I changed `.order_by(Film.title.asc())` to `.order_by(WatchlistEntry.date_added.desc())` and updated the docstring (commit `fix: sort watchlist by date added instead of alphabetically`). Then I added `test_get_watchlist_returns_newest_first` to `tests/test_watchlist.py`, modeled on `test_get_collection_returns_newest_first`. It adds "Alien" 5 days ago and "Blade Runner" now and checks that Blade Runner comes first. Alphabetical order would put Alien first, so the test would actually catch it if the sorting went back to alphabetical (commit `test: add test for get_watchlist sort order`). All tests pass.
+
+**Engagement with reviewer's point:** I agree with "most users want to see what they added recently," and I think it's even more true for watchlists than collections, because a watchlist is about what you want to do *next*. The one thing I'd push back on a little is that my alphabetical concern doesn't totally go away. Once someone's watchlist gets long (like 100+ films), finding a specific title by scrolling through date order is annoying, and older films can sink to the bottom and get forgotten. I don't think that's a reason to change the default, though. It's more of a search/sort problem. If it ends up being an issue, I think the cleanest fix would be an optional `?sort=title` query param on `GET /watchlist/<user_id>`, with date added staying as the default. I left that out of this PR to keep it focused, but I'm happy to add it if you think it's worth it.
 
 ## Comment 6 — Rebase
-**What conflicted:**
-**How I resolved it:**
+**What conflicted:** I ran `git fetch origin` and then `git rebase origin/main`. It stopped on my first watchlist commit (the one that added the `WatchlistEntry` model) with a conflict in `models.py` on the `film_id` column:
+- `main` (after the UUID refactor): `film_id = db.Column(db.String(36), db.ForeignKey("film.id"), nullable=False)`
+- my branch: `film_id = db.Column(db.Integer, db.ForeignKey("film.id"), nullable=False, index=True)`
+
+Side note: the fetch failed the first time with "did not send all necessary objects". It turned out there were some leftover files in `.git` (duplicate `HEAD 2` refs and old empty `.lock` files from a git process that crashed on Nov 12), and they were blocking `origin/main` from being created. I checked that no git processes were running, deleted the stale files, and then the fetch and rebase worked.
+
+**How I resolved it:** I kept main's `db.String(36)` type, since film IDs are UUIDs now and `Film.id` is a `String(36)` column, so the foreign key has to match. I also kept my `index=True`, because the watchlist looks up rows by `film_id` (like in the new duplicate check), so the index is still useful. Final line: `film_id = db.Column(db.String(36), db.ForeignKey("film.id"), nullable=False, index=True)`. Then `git add models.py` and `git rebase --continue`, and the rest of my commits replayed without conflicts.
+
+The rebase only fixed the model, so after it finished I searched the watchlist files for anything else still assuming integer IDs and found three:
+- `services/watchlist_service.py`: docstring said `film_id (int): ID of the film. (Note: integer — pre-refactor)` → changed to `film_id (str): UUID of the film.`
+- `routes/watchlist/watchlist.py`: endpoint docstring said `Body: { "film_id": <int> }` → changed to `<uuid>`
+- `tests/test_watchlist.py`: the nonexistent-film test used `fake_film_id = 99999` → changed to `"00000000-0000-0000-0000-000000000000"`, which is the same fake UUID `test_collection.py` uses
+
+I committed those separately as `fix: update WatchlistEntry film_id to UUID after main branch refactor`.
+
 **How I verified no conflict remains:**
+- Searched all `.py` files for `<<<<<<<` / `>>>>>>>` conflict markers. None left.
+- Searched the watchlist service, route, and tests for `int` / `integer` / `pre-refactor`. No integer-ID references left.
+- `git log --merges --oneline origin/main..HEAD` returns nothing, so there are no merge commits in my branch.
+- `git log --oneline --graph` shows a straight line, with my commits sitting on top of `57ec3f9 refactor: migrate film IDs from integer to UUID`.
+- Ran `pytest tests/ -v` and all 6 tests pass (4 collection + 2 watchlist), now running against the UUID version of the models.
 
 ## PR Description
 <!-- Written at the end — feature overview, design decisions, manual testing steps -->
