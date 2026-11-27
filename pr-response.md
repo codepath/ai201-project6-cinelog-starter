@@ -26,9 +26,9 @@
 **Engagement with reviewer's point:**
 
 ## Comment 6 — Rebase
-**What conflicted:**
-**How I resolved it:**
-**How I verified no conflict remains:**
+**What conflicted:** There was a merge conflict due to models.py.
+**How I resolved it:** It was resolved by using user id's for both foreign keys.
+**How I verified no conflict remains:** The rebase worked the second time.
 
 ## PR Description
 <!-- Written at the end — feature overview, design decisions, manual testing steps -->
