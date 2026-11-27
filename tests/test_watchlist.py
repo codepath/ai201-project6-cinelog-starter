@@ -100,10 +100,10 @@ def test_add_to_watchlist_nonexistent_film_raises(app, sample_user):
 
 # ── get_watchlist sort order ────────────────────────────────────────────────
 
-def test_get_watchlist_returns_newest_first(app, sample_user):
+def test_get_watchlist_returns_alpha_first(app, sample_user):
     """
-    get_collection() should return films sorted by date_added descending
-    (most recently added first).
+    get_watchlist() should return films sorted by alphabetic order descending
+    (earlist in alphabet first).
     """
     with app.app_context():
         from datetime import datetime, timezone, timedelta
