@@ -33,3 +33,7 @@ I used Claude to help understand the conventions of the collection_service featu
 
 ## PR Description
 The watchlist feature allows users to add films to a watchlist. If a film is not found, or if the film is already in the user's watchlist, errors will be raised. The watchlist is sorted in alphabetical order as of now, but there is a possibility to default the sorting to the date the film was added and allowing the user to toggle between sorting options. The default visibility for the user's watchlist is public, and I think this should stay the default, but that the user should have the option to make it private. There were tests written in test_collection.py that I rewrote to test the watchlist feature in test_watchlist.py. It tests adding a film to the list, the deduplication feature, raising an error when the film doesn't exist, and the sorting order of the watchlist.
+
+## Screenshot 
+
+<img width="1518" height="320" alt="image" src="https://github.com/user-attachments/assets/6728bd41-e79b-467a-8716-89a1d614ad1c" />
