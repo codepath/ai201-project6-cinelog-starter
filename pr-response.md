@@ -1,7 +1,7 @@
 # PR Response Doc — CineLog Watchlist Feature
 
 ## AI Usage
-<!-- Fill in at the end — how you used AI tools during this project -->
+I used Claude to help understand the conventions of the collection_service feature and its tests. I also used Claude to debug my rebase and commit processes, because I ran into a few issues due to unfamiliarity with some of the process.
 
 ## Comment 1 — Rename
 **What I did:** Renamed add_to_watchlist() to save_to_watchlist
